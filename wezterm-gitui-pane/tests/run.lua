@@ -29,11 +29,36 @@ eq(nilret, nil, 'returns nil when no .git anywhere')
 eq(err, 'not_a_repo', 'error tag is not_a_repo')
 eq(git.resolve_repo_root('/elsewhere', exists, 'open_anyway'), '/elsewhere', 'open_anyway returns start dir')
 
+print('== resolve_repo_root (Windows paths) ==')
+local win_fs = {
+    ['C:/Users/x/proj/.git'] = true,
+    ['C:/Users/x/proj'] = true,
+    ['C:/Users/x/proj/src'] = true,
+    ['C:/Users/x/proj/src/nested'] = true,
+}
+local function win_exists(p) return win_fs[p] or false end
+
+eq(git.resolve_repo_root('C:/Users/x/proj', win_exists, 'walk_up'), 'C:/Users/x/proj', 'win: finds .git at root')
+eq(git.resolve_repo_root('C:/Users/x/proj/src/nested', win_exists, 'walk_up'), 'C:/Users/x/proj', 'win: walks up to find .git')
+eq(git.resolve_repo_root('C:\\Users\\x\\proj\\src\\nested', win_exists, 'walk_up'), 'C:/Users/x/proj', 'win: backslash paths normalised')
+local wnil, werr = git.resolve_repo_root('C:/other', win_exists, 'walk_up')
+eq(wnil, nil, 'win: returns nil when no .git')
+eq(werr, 'not_a_repo', 'win: error tag is not_a_repo')
+eq(git.resolve_repo_root('C:/Users/x/proj/', win_exists, 'walk_up'), 'C:/Users/x/proj', 'win: trailing slash stripped')
+
 print('== cwd_from_url ==')
 eq(git.cwd_from_url('file://hostname/home/x/proj'), '/home/x/proj', 'parses file:// URL')
 eq(git.cwd_from_url('file:///home/x/proj%20space'), '/home/x/proj space', 'URL-decodes %20')
 eq(git.cwd_from_url('/already/a/path'), '/already/a/path', 'passthrough for bare path')
 eq(git.cwd_from_url(nil), nil, 'nil returns nil')
+
+print('== cwd_from_url (Windows paths) ==')
+eq(git.cwd_from_url('file://hostname/C:/Users/me/repo'), 'C:/Users/me/repo', 'win: strips leading slash before drive letter')
+eq(git.cwd_from_url('file:///C:/Users/me/repo'), 'C:/Users/me/repo', 'win: file:/// with drive letter')
+eq(git.cwd_from_url('file://hostname/C:/Users/me/repo%20space'), 'C:/Users/me/repo space', 'win: URL-decodes and strips slash')
+eq(git.cwd_from_url({ path = '/C:/Users/me' }), 'C:/Users/me', 'win: table .path strips leading slash')
+eq(git.cwd_from_url({ file_path = '/D:/proj' }), 'D:/proj', 'win: table .file_path strips leading slash')
+eq(git.cwd_from_url({ file_path = '\\\\host\\D:\\proj', path = '/D:/proj' }), 'D:/proj', 'win: UNC .file_path skipped, falls through to .path')
 
 print('== build_gitui_argv ==')
 local argv = git.build_gitui_argv('/opt/homebrew/bin/gitui', '/repo', { '--theme', 'dark' })

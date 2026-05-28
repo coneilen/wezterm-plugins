@@ -42,17 +42,28 @@ end
 local function resolve_cwd(pane, cfg)
     local cwd_obj = pane:get_current_working_dir()
     local cwd = git.cwd_from_url(cwd_obj)
-    if not cwd then return nil, 'no_cwd' end
 
-    local function exists(path)
-        local f = io.open(path, 'r')
-        if f then f:close(); return true end
-        -- Directories aren't openable via io.open on all systems; fall back to ls
-        local ok = os.execute('test -e ' .. string.format('%q', path) .. ' 2>/dev/null')
-        return ok == true or ok == 0
+    -- Fallback: when OSC 7 isn't available (e.g. cmd.exe / PowerShell without
+    -- prompt integration), try the foreground process's cwd reported by the OS.
+    if not cwd then
+        local ok, info = pcall(function() return pane:get_foreground_process_info() end)
+        if ok and info and info.cwd and info.cwd ~= '' then
+            cwd = git.strip_leading_slash_drive(info.cwd:gsub('\\', '/'))
+        end
     end
 
-    return git.resolve_repo_root(cwd, exists, cfg.cwd_strategy)
+    if not cwd then return nil, 'no_cwd' end
+
+    -- Check for .git marker: either a file (worktrees) or a directory (.git/HEAD always exists).
+    local function git_marker_exists(path)
+        local f = io.open(path, 'r')
+        if f then f:close(); return true end
+        local hf = io.open(path .. '/HEAD', 'r')
+        if hf then hf:close(); return true end
+        return false
+    end
+
+    return git.resolve_repo_root(cwd, git_marker_exists, cfg.cwd_strategy)
 end
 
 -- Inspect a pane and decide how gitui should be launched for it.
@@ -169,6 +180,10 @@ end
 function M.toggle(window, pane)
     local cfg = config_mod.get()
     local tab = pane:tab()
+    if not tab then
+        wezterm.log_error('[gitui-pane] pane:tab() returned nil — pane may have been closed')
+        return
+    end
     local existing = find_tracked_pane(window, tab, cfg)
     if existing then
         local key = scope_key(window, tab, cfg)

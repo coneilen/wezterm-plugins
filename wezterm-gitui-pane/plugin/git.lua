@@ -1,6 +1,29 @@
 -- Git helpers: cwd resolution + small shell-out wrappers (pure-logic, testable)
 local M = {}
 
+-- Normalise backslashes to forward slashes and strip trailing separators,
+-- preserving Windows drive roots like "C:/".
+local function normalise(path)
+    path = path:gsub('\\', '/')
+    -- Strip trailing slashes, but keep "C:/" intact
+    path = path:gsub('/+$', '')
+    if path:match('^[A-Za-z]:$') then path = path .. '/' end
+    if path == '' then path = '/' end
+    return path
+end
+
+-- Return true when `path` is a filesystem root (/ or C:/).
+local function is_root(path)
+    return path == '/' or path:match('^[A-Za-z]:/$') ~= nil
+end
+
+-- Strip a leading slash before a Windows drive letter ("/C:/…" → "C:/…").
+-- WezTerm URLs often produce paths in this form.
+function M.strip_leading_slash_drive(path)
+    if not path then return path end
+    return (path:gsub('^/([A-Za-z]:)', '%1'))
+end
+
 -- Resolve a cwd from a pane to a git repo root, honouring config.cwd_strategy.
 -- Returns (cwd, error). error == 'not_a_repo' if no .git ancestor found.
 function M.resolve_repo_root(start_cwd, exists_fn, strategy)
@@ -9,21 +32,20 @@ function M.resolve_repo_root(start_cwd, exists_fn, strategy)
 
     if strategy == 'open_anyway' then return start_cwd end
 
-    local cwd = start_cwd
-    -- Strip trailing slashes
-    cwd = cwd:gsub('/+$', '')
-    if cwd == '' then cwd = '/' end
+    local cwd = normalise(start_cwd)
 
     local guard = 0
     while cwd ~= '' do
         guard = guard + 1
         if guard > 64 then break end
         if exists_fn(cwd .. '/.git') then return cwd end
-        if cwd == '/' then break end
+        if is_root(cwd) then break end
         local parent = cwd:match('^(.+)/[^/]+$')
         if not parent or parent == cwd then
             parent = '/'
         end
+        -- Preserve drive root: "C:" after stripping becomes "C:/"
+        if parent:match('^[A-Za-z]:$') then parent = parent .. '/' end
         cwd = parent
     end
 
@@ -39,12 +61,16 @@ function M.cwd_from_url(url_or_string)
     -- Newer wezterm: userdata with file_path field
     if type(url_or_string) == 'userdata' or type(url_or_string) == 'table' then
         local ok, fp = pcall(function() return url_or_string.file_path end)
-        if ok and fp and fp ~= '' then return fp end
+        -- Skip UNC paths (\\host\...) — they are returned when the file URL
+        -- contains a hostname and are not usable for local file operations.
+        if ok and fp and fp ~= '' and not fp:match('^\\\\') then
+            return M.strip_leading_slash_drive(fp)
+        end
         local ok2, path = pcall(function() return url_or_string.path end)
         if ok2 and path and path ~= '' then
             -- URL-decode %xx
             path = path:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end)
-            return path
+            return M.strip_leading_slash_drive(path)
         end
     end
     if type(url_or_string) == 'string' then
@@ -52,7 +78,7 @@ function M.cwd_from_url(url_or_string)
         -- file://host/path
         local p = s:match('^file://[^/]*(/.*)$') or s:match('^file:(/.*)$') or s
         p = p:gsub('%%(%x%x)', function(h) return string.char(tonumber(h, 16)) end)
-        return p
+        return M.strip_leading_slash_drive(p)
     end
 end
 
