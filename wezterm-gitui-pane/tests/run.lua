@@ -71,6 +71,46 @@ eq(bs[3].remote, true, 'HEAD pointer marked remote')
 eq(bs[4].name, 'origin/main', 'origin/main parsed')
 eq(bs[5].name, 'origin/feature/x', 'origin/feature/x parsed')
 
+print('== config merge ==')
+local cfg = config_mod.set({ split = { size = 0.5 }, keys = { toggle = false } })
+eq(cfg.split.size, 0.5, 'override split size')
+eq(cfg.split.direction, 'Right', 'defaults preserved')
+eq(cfg.keys.toggle, false, 'can disable a key')
+eq(cfg.keys.branch_pick.key, 'B', 'other keys retained')
+eq(cfg.remote_gitui_path, 'gitui', 'remote_gitui_path default')
+eq(cfg.use_remote_cwd_from_osc7, true, 'osc7 default on')
+eq(cfg.keys.worktree_pick.key, 'W', 'worktree_pick default key')
+eq(cfg.worktree_picker.action, 'shell', 'worktree action default')
+
+print('== parse_worktrees ==')
+local wt_raw = [[
+worktree /home/x/proj
+HEAD abc123def
+branch refs/heads/main
+
+worktree /home/x/proj-feature
+HEAD 999888777
+branch refs/heads/feature/x
+
+worktree /home/x/proj-detached
+HEAD 0123456789abcdef
+detached
+
+worktree /home/x/bare
+bare
+]]
+local wts = git.parse_worktrees(wt_raw, '/home/x/proj-feature')
+eq(#wts, 4, '4 worktrees parsed')
+eq(wts[1].path, '/home/x/proj', 'wt1 path')
+eq(wts[1].branch, 'main', 'wt1 branch stripped refs/heads/')
+eq(wts[1].is_current, nil, 'wt1 not current')
+eq(wts[2].is_current, true, 'wt2 marked current')
+eq(wts[2].branch, 'feature/x', 'nested branch name parsed')
+eq(wts[3].detached, true, 'wt3 detached')
+eq(wts[3].branch, nil, 'wt3 no branch')
+eq(wts[4].bare, true, 'wt4 bare')
+eq(git.parse_worktrees('', nil)[1], nil, 'empty input -> empty list')
+
 print('== parse_log ==')
 local US = string.char(31)
 local log = "abc123" .. US .. "fix bug" .. US .. "Alice" .. US .. "10 minutes ago\n" ..
@@ -81,15 +121,6 @@ eq(cs[1].hash, 'abc123', 'commit 1 hash')
 eq(cs[1].subject, 'fix bug', 'commit 1 subject')
 eq(cs[2].author, 'Bob', 'commit 2 author')
 eq(cs[2].age, '2 hours ago', 'commit 2 age')
-
-print('== config merge ==')
-local cfg = config_mod.set({ split = { size = 0.5 }, keys = { toggle = false } })
-eq(cfg.split.size, 0.5, 'override split size')
-eq(cfg.split.direction, 'Right', 'defaults preserved')
-eq(cfg.keys.toggle, false, 'can disable a key')
-eq(cfg.keys.branch_pick.key, 'B', 'other keys retained')
-eq(cfg.remote_gitui_path, 'gitui', 'remote_gitui_path default')
-eq(cfg.use_remote_cwd_from_osc7, true, 'osc7 default on')
 
 print('== host_from_url ==')
 eq(git.host_from_url('file://otherhost/home/x'), 'otherhost', 'parses host')
