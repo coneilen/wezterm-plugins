@@ -38,10 +38,11 @@ local default_config = {
 
     -- Keybindings (set to false to disable any individual binding)
     keys = {
-        toggle      = { key = 'g', mods = 'CMD' },         -- toggle gitui pane
-        branch_pick = { key = 'B', mods = 'CMD|SHIFT' },   -- branch picker overlay
-        log_pick    = { key = 'L', mods = 'CMD|SHIFT' },   -- recent commit -> show in new pane
-        focus       = { key = 'G', mods = 'CMD|SHIFT' },   -- focus gitui pane (no toggle)
+        toggle        = { key = 'g', mods = 'CMD' },         -- toggle gitui pane
+        branch_pick   = { key = 'B', mods = 'CMD|SHIFT' },   -- branch picker overlay
+        log_pick      = { key = 'L', mods = 'CMD|SHIFT' },   -- recent commit -> show in new pane
+        focus         = { key = 'G', mods = 'CMD|SHIFT' },   -- focus gitui pane (no toggle)
+        worktree_pick = { key = 'W', mods = 'CMD|SHIFT' },   -- worktree picker overlay
     },
 
     -- Limits for overlays
@@ -53,6 +54,22 @@ local default_config = {
         max_entries = 50,
         diff_in_new_pane = true,
         pager = 'less -R',
+    },
+    worktree_picker = {
+        max_entries = 50,
+        -- What to do with the chosen worktree:
+        --   'shell' — split a new pane with your $SHELL, cwd set to the worktree
+        --   'gitui' — split a new pane running gitui pointed at the worktree
+        --   'cd'    — send `cd <path>` to the current pane (no new pane)
+        action = 'shell',
+        split = {
+            direction = 'Right',
+            size = 0.4,
+            top_level = false,
+        },
+        -- Hide the main worktree from the picker (useful when you only want
+        -- to jump between linked worktrees)
+        hide_current = false,
     },
 }
 

@@ -127,6 +127,55 @@ function M.parse_branches(text)
     return out
 end
 
+-- Parse `git worktree list --porcelain` output. Returns list of
+-- { path, head, branch, detached, bare, locked, prunable, is_current }.
+-- `is_current` requires the caller to pass the active worktree path so we can
+-- mark it; pass nil to skip.
+function M.parse_worktrees(text, current_path)
+    local out = {}
+    if not text then return out end
+
+    local cur
+    local function flush()
+        if cur and cur.path then
+            if current_path and cur.path == current_path then
+                cur.is_current = true
+            end
+            out[#out + 1] = cur
+        end
+        cur = nil
+    end
+
+    for line in (text .. '\n'):gmatch('([^\n]*)\n') do
+        if line == '' then
+            flush()
+        else
+            local key, rest = line:match('^(%S+)%s*(.*)$')
+            if key == 'worktree' then
+                flush()
+                cur = { path = rest }
+            elseif cur then
+                if key == 'HEAD' then
+                    cur.head = rest
+                elseif key == 'branch' then
+                    -- e.g. refs/heads/feature/x -> feature/x
+                    cur.branch = (rest:gsub('^refs/heads/', ''))
+                elseif key == 'detached' then
+                    cur.detached = true
+                elseif key == 'bare' then
+                    cur.bare = true
+                elseif key == 'locked' then
+                    cur.locked = rest ~= '' and rest or true
+                elseif key == 'prunable' then
+                    cur.prunable = rest ~= '' and rest or true
+                end
+            end
+        end
+    end
+    flush()
+    return out
+end
+
 -- Parse `git log --pretty=...` output we control. Format: %h\x1f%s\x1f%an\x1f%ar
 function M.parse_log(text)
     local out = {}

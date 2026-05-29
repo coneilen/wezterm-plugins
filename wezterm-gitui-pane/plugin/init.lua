@@ -304,6 +304,83 @@ end
 
 -- ─── Setup ────────────────────────────────────────────────────────────────
 
+function M.worktree_picker(window, pane)
+    local cfg = config_mod.get()
+    local repo, err = resolve_cwd(pane, cfg)
+    if not repo then notify(window, err or 'not a git repo'); return end
+
+    local raw = run_git(repo, 'worktree list --porcelain')
+    local worktrees = git.parse_worktrees(raw or '', repo)
+
+    local choices = {}
+    for _, w in ipairs(worktrees) do
+        if not (cfg.worktree_picker.hide_current and w.is_current) then
+            local marker
+            if w.is_current then marker = '● '
+            elseif w.bare then marker = '∅ '
+            elseif w.locked then marker = '🔒 '
+            else marker = '  ' end
+
+            local ref
+            if w.bare then ref = '(bare)'
+            elseif w.detached then ref = '(detached ' .. (w.head and w.head:sub(1, 7) or '?') .. ')'
+            elseif w.branch then ref = w.branch
+            else ref = '(unknown)' end
+
+            choices[#choices + 1] = {
+                id = w.path,
+                label = string.format('%s%s  %s', marker, w.path, ref),
+            }
+            if #choices >= (cfg.worktree_picker.max_entries or 50) then break end
+        end
+    end
+    if #choices == 0 then notify(window, 'No worktrees'); return end
+
+    local wp = cfg.worktree_picker
+    window:perform_action(
+        wezterm.action.InputSelector({
+            title = 'Switch worktree',
+            choices = choices,
+            fuzzy = true,
+            action = wezterm.action_callback(function(_win, target_pane, id, _label)
+                if not id then return end
+
+                if wp.action == 'cd' then
+                    pcall(function()
+                        target_pane:send_text(string.format('cd %q\n', id))
+                    end)
+                    return
+                end
+
+                local args
+                if wp.action == 'gitui' then
+                    args = { cfg.gitui_path or 'gitui', '-d', id }
+                else
+                    -- 'shell' or anything unknown: launch the user's shell in cwd
+                    args = nil
+                end
+
+                local split_opts = {
+                    direction = (wp.split and wp.split.direction) or 'Right',
+                    size = wp.split and wp.split.size,
+                    cwd = id,
+                    top_level = wp.split and wp.split.top_level or false,
+                }
+                if args then split_opts.args = args end
+
+                local ok, new_pane = pcall(function() return target_pane:split(split_opts) end)
+                if not ok or not new_pane then
+                    notify(window, 'Failed to open worktree pane')
+                    wezterm.log_error('[gitui-pane] worktree split failed: ' .. tostring(new_pane))
+                end
+            end),
+        }),
+        pane
+    )
+end
+
+-- ─── Setup ────────────────────────────────────────────────────────────────
+
 local function bind(config, k, callback)
     if not k then return end
     config.keys = config.keys or {}
@@ -316,10 +393,11 @@ end
 function M.apply_to_config(config, opts)
     local cfg = config_mod.set(opts)
 
-    bind(config, cfg.keys.toggle,      function(win, pane) M.toggle(win, pane) end)
-    bind(config, cfg.keys.focus,       function(win, pane) M.focus(win, pane) end)
-    bind(config, cfg.keys.branch_pick, function(win, pane) M.branch_picker(win, pane) end)
-    bind(config, cfg.keys.log_pick,    function(win, pane) M.log_picker(win, pane) end)
+    bind(config, cfg.keys.toggle,        function(win, pane) M.toggle(win, pane) end)
+    bind(config, cfg.keys.focus,         function(win, pane) M.focus(win, pane) end)
+    bind(config, cfg.keys.branch_pick,   function(win, pane) M.branch_picker(win, pane) end)
+    bind(config, cfg.keys.log_pick,      function(win, pane) M.log_picker(win, pane) end)
+    bind(config, cfg.keys.worktree_pick, function(win, pane) M.worktree_picker(win, pane) end)
 
     return cfg
 end

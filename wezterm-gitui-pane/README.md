@@ -22,6 +22,9 @@ and commit-diff viewing.
   branches → `git checkout`.
 - **Log picker** overlay — last N commits → `git show <hash>` piped to your
   pager in a new split.
+- **Worktree picker** overlay — fuzzy list of `git worktree list` entries;
+  pick one to open it as a new split pane (shell, gitui, or `cd` in place).
+  gitui itself has no worktree UI, so this fills the gap.
 - **No shell-history pollution** — gitui is launched as a child process, not
   typed into your shell.
 
@@ -33,6 +36,7 @@ and commit-diff viewing.
 | `⌘⇧G` | Focus gitui pane (open if missing) |
 | `⌘⇧B` | Branch picker → checkout |
 | `⌘⇧L` | Log picker → show commit diff in a new pane |
+| `⌘⇧W` | Worktree picker → open a pane in another worktree |
 
 Set any individual binding to `false` to disable it.
 
@@ -86,10 +90,11 @@ gitui_pane.apply_to_config(config, {
   close_on_exit = true,        -- send 'q' to gitui on toggle-off
 
   keys = {
-    toggle      = { key = 'g', mods = 'CMD' },
-    focus       = { key = 'G', mods = 'CMD|SHIFT' },
-    branch_pick = { key = 'B', mods = 'CMD|SHIFT' },
-    log_pick    = { key = 'L', mods = 'CMD|SHIFT' },
+    toggle        = { key = 'g', mods = 'CMD' },
+    focus         = { key = 'G', mods = 'CMD|SHIFT' },
+    branch_pick   = { key = 'B', mods = 'CMD|SHIFT' },
+    log_pick      = { key = 'L', mods = 'CMD|SHIFT' },
+    worktree_pick = { key = 'W', mods = 'CMD|SHIFT' },
   },
 
   branch_picker = {
@@ -101,6 +106,17 @@ gitui_pane.apply_to_config(config, {
     max_entries      = 50,
     diff_in_new_pane = true,
     pager            = 'less -R',
+  },
+
+  worktree_picker = {
+    max_entries  = 50,
+    action       = 'shell',     -- 'shell' | 'gitui' | 'cd'
+    hide_current = false,
+    split = {
+      direction = 'Right',
+      size      = 0.4,
+      top_level = false,
+    },
   },
 })
 ```
@@ -135,6 +151,7 @@ gitui_pane.toggle(window, pane)
 gitui_pane.focus(window, pane)
 gitui_pane.branch_picker(window, pane)
 gitui_pane.log_picker(window, pane)
+gitui_pane.worktree_picker(window, pane)
 ```
 
 You can bind these to your own keys instead of using the built-in `keys`
